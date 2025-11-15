@@ -18,8 +18,10 @@ source("R/codon_properties.R")   # brings in codon_props + aa_chemistry_map
 # --------------------------------------
 codon_to_aa <- function(codon) {
   if (grepl("-", codon) || nchar(codon) != 3) return(NA_character_)
-  if (!codon %in% names(GENETIC_CODE)) return(NA_character_)
-  unname(GENETIC_CODE[[codon]])
+  if (!codon %in% names(Biostrings::GENETIC_CODE
+)) return(NA_character_)
+  unname(Biostrings::GENETIC_CODE
+[[codon]])
 }
 
 # --------------------------------------
@@ -78,7 +80,8 @@ build_codon_table <- function(fasta_path) {
     for (j in seq_len(nrow(seq_mat))) {
       codon_j <- paste0(seq_mat[j, cols], collapse = "")
       if (grepl("-", codon_j)) next
-      if (!(codon_j %in% names(GENETIC_CODE))) next
+      if (!(codon_j %in% names(Biostrings::GENETIC_CODE
+))) next
       
       aa_j <- codon_to_aa(codon_j)
       if (is.na(aa_j)) next
@@ -99,7 +102,13 @@ build_codon_table <- function(fasta_path) {
     nonsyn <- sum(aas_all != ref_aa)
     out$dNdS_proxy[k] <- (nonsyn + 0.5) / (syn + 0.5)
   }
+    out_clean <- out |>
+        filter(
+        !grepl("-", ref_codon),  # no gaps anywhere in the codon
+        !is.na(ref_aa)           # must translate to an amino acid
+        )
 
+  #return(out_clean)
   out
 }
 

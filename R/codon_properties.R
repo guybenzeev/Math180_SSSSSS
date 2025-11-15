@@ -28,14 +28,17 @@ aa_chemistry_map <- c(
 # 2. Codon degeneracy + mutability
 # -----------------------------
 make_codon_properties <- function() {
-  data(GENETIC_CODE)
-  
-  all_codons <- names(GENETIC_CODE)
-  aa_vec <- GENETIC_CODE
+  # NO data() call here – just use the object
+  gc <- Biostrings::GENETIC_CODE        # named vector: codon -> AA
+
+  all_codons <- names(gc)
+  aa_vec <- unname(gc)                  # amino acids in same order
+  names(aa_vec) <- all_codons           # keep codon names if helpful
+
+  # degeneracy: how many codons map to each amino acid
   deg_table <- table(aa_vec)
-  
   codon_degeneracy <- as.integer(deg_table[aa_vec])
-  
+
   nts <- c("A", "C", "G", "T")
 
   # List single-nt neighbors of a codon
@@ -60,13 +63,14 @@ make_codon_properties <- function() {
   for (i in seq_along(all_codons)) {
     codon <- all_codons[i]
     ref_aa <- aa_vec[i]
-    neigh <- single_nt_neighbors(codon)
-    neigh_aa <- GENETIC_CODE[neigh]
 
-    syn <- sum(neigh_aa == ref_aa)
+    neigh <- single_nt_neighbors(codon)
+    neigh_aa <- gc[neigh]
+
+    syn   <- sum(neigh_aa == ref_aa)
     nonsyn <- sum(neigh_aa != ref_aa)
     total <- syn + nonsyn
-    
+
     syn_frac[i]    <- syn / total
     nonsyn_frac[i] <- nonsyn / total
   }
@@ -74,9 +78,9 @@ make_codon_properties <- function() {
   tibble(
     codon        = all_codons,
     aa           = aa_vec,
-    degeneracy  = codon_degeneracy,
-    syn_frac    = syn_frac,
-    nonsyn_frac = nonsyn_frac
+    degeneracy   = codon_degeneracy,
+    syn_frac     = syn_frac,
+    nonsyn_frac  = nonsyn_frac
   )
 }
 
