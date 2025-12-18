@@ -63,11 +63,10 @@ aa_to_codon <- map_aa_to_codon_index(
 # 3. Define PR + RT resistance positions (HXB2 protein numbering)
 # -----------------------
 
-# RT resistance positions (HXB2 RT numbering) – your original list:
+# RT resistance positions (HXB2 RT numbering):
 rt_resistance_positions <- c(41, 65, 67, 69, 70, 74, 100, 101, 103, 106, 115, 138, 151, 181, 184, 188, 190, 210, 215, 219, 230)
 
-# Example PR resistance positions (HXB2 PR numbering).
-# You can tweak this list according to the exact set you want (HIVDB/IAS).
+# PR resistance positions
 pr_resistance_positions <- c(
   30, 32, 33, 46, 47, 48, 50, 54,
   76, 82, 84, 88, 90
