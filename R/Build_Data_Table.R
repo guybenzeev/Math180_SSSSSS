@@ -1,5 +1,5 @@
 # ==============================================
-# run_analysis.R
+# Build_Data_Table.R
 # Complete workflow:
 #   1. Detect pol frame + PR/RT motifs
 #   2. Build codon table from alignment
@@ -12,7 +12,6 @@
 library(dplyr)
 library(Biostrings)
 
-# Your existing helpers
 source("R/preprocess_alignment.R")        # defines build_codon_table()
 source("R/utils/detect_pol_proteins.R")   # prints PR/RT motifs, returns best_frame + positions
 source("R/utils/pol_mapping.R")           # map_aa_to_codon_index(), etc.
