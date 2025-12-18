@@ -1,13 +1,21 @@
 ############################################################
 # Blockwise Logistic Regression Analysis for HIV-1 pol
+# Reduced Predictor Model (low-collinearity)
 #
 # For each 100-codon block:
 #   - Use that block as TEST
 #   - Use all other codons as TRAIN
 #   - Oversample minority class in TRAIN
-#   - Fit logistic regression
+#   - Fit logistic regression (reduced predictor set)
 #   - Tune threshold to maximize F1 on that block
-#   - Record performance metrics
+#   - Record performance metrics & coefficients
+#
+# Predictors used:
+#   - codon_degeneracy
+#   - syn_frac          (keep only one of syn/nonsyn)
+#   - shannon_entropy
+#   - conservation      (drop log_dNdS to reduce collinearity)
+#   - aa_chemistry (categorical)
 #
 # Scholarly Super Serious Statistically Scientific Society
 # Vincent Ngo, Charles Pierceton, Guy Ben Zeev, Marc-Philippe Gnagne
@@ -61,7 +69,7 @@ if (!"resistance_site" %in% names(data)) {
 }
 data$resistance_site <- as.numeric(data$resistance_site)
 
-# log dNdS
+# (Optional) log dNdS just for later exploratory plots (not used in model)
 if ("dNdS_proxy" %in% names(data)) {
   data$log_dNdS <- log1p(data$dNdS_proxy)
 } else {
@@ -83,14 +91,13 @@ if ("aa_chemistry" %in% names(data)) {
 ## 2. Select predictors and clean model data ----
 ############################################################
 
+# Reduced, low-collinearity predictor set
 predictor_vars <- c(
   "codon_degeneracy",
-  "syn_frac",
-  "nonsyn_frac",
-  "aa_chemistry",
+  "syn_frac",           # keep only one of syn_frac / nonsyn_frac
   "shannon_entropy",
-  "conservation",
-  if ("log_dNdS" %in% names(data)) "log_dNdS" else "dNdS_proxy"
+  "conservation",       # keep conservation; drop log_dNdS from model
+  "aa_chemistry"
 )
 
 missing_predictors <- setdiff(predictor_vars, names(data))
@@ -258,7 +265,9 @@ print(blocks)
 ## 5. Loop over blocks: train/test Logit_oversampled_tuned ----
 ############################################################
 
-results_list <- list()
+results_list    <- list()
+model_coefs     <- list()
+model_summaries <- list()
 
 logit_formula <- as.formula(
   paste("resistance_site ~", paste(predictor_vars, collapse = " + "))
@@ -294,22 +303,22 @@ for (i in seq_len(nrow(blocks))) {
   cat("Test class distribution:\n")
   print(test_tab)
   
-    # If there are no positives in TRAIN or TEST, skip this block
-    if (length(train_tab) < 2 || train_tab["1"] == 0) {
+  # If there are no positives in TRAIN or TEST, skip this block
+  if (length(train_tab) < 2 || train_tab["1"] == 0) {
     warning("No positive examples in TRAIN for block ", i,
             " – skipping this block.")
     next
-    }
-    if (!("1" %in% names(test_tab)) || test_tab["1"] == 0) {
+  }
+  if (!("1" %in% names(test_tab)) || test_tab["1"] == 0) {
     warning("No positive examples in TEST for block ", i,
             " – skipping this block.")
     next
-    }
+  }
   
   # Oversample minority class in TRAIN
   train_os <- oversample_minority(train_df)
   
-  # Class weights (mostly will be ~1 after oversampling, but keep general)
+  # Class weights (after oversampling this will often be ~balanced)
   tab_y <- table(train_os$resistance_site)
   if (length(tab_y) < 2 || tab_y["1"] == 0) {
     glm_weights <- rep(1, nrow(train_os))
@@ -326,8 +335,11 @@ for (i in seq_len(nrow(blocks))) {
     weights = glm_weights
   )
   
+  model_coefs[[i]]     <- coef(logit_fit)
+  model_summaries[[i]] <- summary(logit_fit)
+  
   # Predict on TEST
-  y_test  <- test_df$resistance_site
+  y_test      <- test_df$resistance_site
   logit_probs <- as.numeric(predict(logit_fit, newdata = test_df, type = "response"))
   
   # Tune threshold
@@ -360,23 +372,96 @@ for (i in seq_len(nrow(blocks))) {
 }
 
 ############################################################
-## 6. Summarize results ----
+## 6. Summarize blockwise results ----
 ############################################################
 
 block_results <- do.call(rbind, results_list)
 
-cat("\n\n===== Blockwise Logistic Regression Results =====\n")
+cat("\n\n===== Blockwise Logistic Regression Results (Reduced Model) =====\n")
 block_results_round <- block_results
 metric_cols <- c("Accuracy", "Precision", "Recall", "F1", "ROC_AUC", "PR_AUC", "threshold")
-block_results_round[ , metric_cols] <- round(block_results_round[ , metric_cols], 3)
+block_results_round[, metric_cols] <- round(block_results_round[, metric_cols], 3)
 print(block_results_round)
 
-# Optionally, sort blocks by F1 or AUC:
 cat("\nBlocks sorted by F1 score (descending):\n")
 print(block_results_round[order(-block_results_round$F1), ])
 
 cat("\nBlocks sorted by ROC AUC (descending):\n")
 print(block_results_round[order(-block_results_round$ROC_AUC), ])
+
+############################################################
+## 7. Print and save model coefficients nicely ----
+############################################################
+
+cat("\n\n===== Logistic Regression Coefficients by Block (Reduced Model) =====\n")
+
+coef_table_list <- lapply(seq_along(model_coefs), function(b) {
+  coefs <- model_coefs[[b]]
+  if (is.null(coefs)) return(NULL)
+  
+  data.frame(
+    block_id   = b,
+    term       = names(coefs),
+    estimate   = as.numeric(coefs),
+    odds_ratio = exp(as.numeric(coefs)),
+    row.names  = NULL
+  )
+})
+
+coef_table <- do.call(rbind, coef_table_list)
+
+# Order nicely: block first, then term names alphabetically
+coef_table <- coef_table[order(coef_table$block_id, coef_table$term), ]
+
+# Round for readability
+coef_table_print <- coef_table
+coef_table_print$estimate   <- round(coef_table_print$estimate, 4)
+coef_table_print$odds_ratio <- round(coef_table_print$odds_ratio, 4)
+
+for (b in unique(coef_table_print$block_id)) {
+  cat("\n--- Block", b, "---\n")
+  print(subset(coef_table_print, block_id == b))
+}
+
+# Save coefficient table for plotting scripts
+save(coef_table, file = "../Results/coef_table_reduced.rda")
+cat("\nSaved coefficient table to ../Results/coef_table_reduced.rda\n")
+############################################################
+## 8. Print confusion matrices for each evaluated block ----
+############################################################
+
+cat("\n\n===== Confusion Matrices for Each Block (Reduced Model) =====\n")
+
+for (i in seq_along(results_list)) {
+  res <- results_list[[i]]
+  if (is.null(res)) next
+  
+  # Identify the block’s test set
+  b_start <- res$start
+  b_end   <- res$end
+  
+  is_test <- data_model$codon_index >= b_start & data_model$codon_index <= b_end
+  test_df  <- data_model[is_test, ]
+  
+  # Recompute probabilities (same model already fitted)
+  logit_fit <- glm(
+    formula = logit_formula,
+    data    = oversample_minority(data_model[!is_test, ]),
+    family  = binomial(link = "logit")
+  )
+  
+  probs <- predict(logit_fit, newdata = test_df, type = "response")
+  threshold <- res$threshold
+  preds <- ifelse(probs >= threshold, 1, 0)
+  
+  cm <- table(
+    truth = factor(test_df$resistance_site, levels = c(0,1)),
+    pred  = factor(preds,                levels = c(0,1))
+  )
+  
+  cat("\n--- Block", i, " (threshold =", round(threshold, 3), ") ---\n")
+  print(cm)
+}
 
 ############################################################
 # End of script

@@ -1,5 +1,5 @@
 # ==============================================
-# run_analysis.R
+# Build_Data_Table.R
 # Complete workflow:
 #   1. Detect pol frame + PR/RT motifs
 #   2. Build codon table from alignment
@@ -12,7 +12,6 @@
 library(dplyr)
 library(Biostrings)
 
-# Your existing helpers
 source("R/preprocess_alignment.R")        # defines build_codon_table()
 source("R/utils/detect_pol_proteins.R")   # prints PR/RT motifs, returns best_frame + positions
 source("R/utils/pol_mapping.R")           # map_aa_to_codon_index(), etc.
@@ -63,11 +62,10 @@ aa_to_codon <- map_aa_to_codon_index(
 # 3. Define PR + RT resistance positions (HXB2 protein numbering)
 # -----------------------
 
-# RT resistance positions (HXB2 RT numbering) – your original list:
+# RT resistance positions (HXB2 RT numbering):
 rt_resistance_positions <- c(41, 65, 67, 69, 70, 74, 100, 101, 103, 106, 115, 138, 151, 181, 184, 188, 190, 210, 215, 219, 230)
 
-# Example PR resistance positions (HXB2 PR numbering).
-# You can tweak this list according to the exact set you want (HIVDB/IAS).
+# PR resistance positions
 pr_resistance_positions <- c(
   30, 32, 33, 46, 47, 48, 50, 54,
   76, 82, 84, 88, 90
